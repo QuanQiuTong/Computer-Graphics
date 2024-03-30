@@ -7,7 +7,7 @@ const float c_pi = 3.14159265358979323846f;
 namespace
 {
 	// Approximately equal to.  We don't want to use == because of
-	// precision issues with floating point.
+	// precision issues with floating
 	inline bool approx(const Vector3f &lhs, const Vector3f &rhs)
 	{
 		const float eps = 1e-8f;
@@ -16,27 +16,17 @@ namespace
 
 }
 
-Matrix3f rotate(const Vector3f &axis, float theta)
-{
-	float c = cos(theta), s = sin(theta), t = 1 - c, x = axis[0], y = axis[1], z = axis[2];
-	return {
-		{t * x * x + c, t * x * y - s * z, t * x * z + s * y},
-		{t * x * y + s * z, t * y * y + c, t * y * z - s * x},
-		{t * x * z - s * y, t * y * z + s * x, t * z * z + c}};
-}
-
 Curve &fixClosed(Curve &curve)
 {
-	// If curve is not closed or need not fix, return it as is.
+	// If curve is not closed or need not fixing, return it as is.
 	if (!approx(curve.front().V, curve.back().V) || approx(curve.front().N, curve.back().N))
 		return curve;
 
-	float theta = acos(Vector3f::dot(curve.front().N, curve.back().N));
+	float t = acos(Vector3f::dot(curve.front().N, curve.back().N)) / curve.size();
 	for (size_t i = 0; i < curve.size(); i++)
 	{
-		Matrix3f M = rotate(curve[i].T, theta * i / curve.size());
-		curve[i].N = M * curve[i].N;
-		curve[i].B = M * curve[i].B;
+		curve[i].N = cos(t * i) * curve[i].N - sin(t * i) * curve[i].B;
+		curve[i].B = Vector3f::cross(curve[i].T, curve[i].N);
 	}
 
 	return curve;
@@ -50,45 +40,31 @@ Curve evalBezier(const vector<Vector3f> &P, unsigned steps)
 		exit(0);
 	}
 
-	Curve R(steps + 1);
-	Vector3f B(0, 0, 1); // Vector3f::cross(Vector3f(1, 0, 0), P[1] - P[0]);
+	Curve R;
+	Vector3f B(0, 0, 1);
 
 	for (size_t i = 0, numCurves = (P.size() - 1) / 3; i < numCurves; ++i)
-	{
-		const Vector3f &P0 = P[i * 3];
-		const Vector3f &P1 = P[i * 3 + 1];
-		const Vector3f &P2 = P[i * 3 + 2];
-		const Vector3f &P3 = P[i * 3 + 3];
-
 		for (unsigned j = 0; j <= steps; ++j)
 		{
-			float t = static_cast<float>(j) / steps;
-			float t2 = t * t;
-			float t3 = t2 * t;
+			float t = float(j) / steps, t2 = t * t, t3 = t2 * t;
 
-			CurvePoint &point = R[i * steps + j];
-			point.V = (1 - 3 * t + 3 * t2 - t3) * P0 +
-					  (3 * t - 6 * t2 + 3 * t3) * P1 +
-					  (3 * t2 - 3 * t3) * P2 +
-					  t3 * P3;
+			Vector3f V = (1 - 3 * t + 3 * t2 - t3) * P[i * 3] +
+						 (3 * t - 6 * t2 + 3 * t3) * P[i * 3 + 1] +
+						 (3 * t2 - 3 * t3) * P[i * 3 + 2] +
+						 t3 * P[i * 3 + 3],
 
-			point.T = ((-3 + 6 * t - 3 * t2) * P0 +
-					   (3 - 12 * t + 9 * t2) * P1 +
-					   (6 * t - 9 * t2) * P2 +
-					   3 * t2 * P3)
-						  .normalized();
+					 T = ((-3 + 6 * t - 3 * t2) * P[i * 3] +
+						  (3 - 12 * t + 9 * t2) * P[i * 3 + 1] +
+						  (6 * t - 9 * t2) * P[i * 3 + 2] +
+						  3 * t2 * P[i * 3 + 3])
+							 .normalized(),
 
-			point.N = Vector3f::cross(B, point.T).normalized();
-			point.B = B = Vector3f::cross(point.T, point.N);
+					 N = Vector3f::cross(B, T).normalized();
+
+			B = Vector3f::cross(T, N);
+
+			R.push_back({V, T, N, B});
 		}
-	}
-
-	cerr << "\t>>> evalBezier has been called with the following input:" << endl;
-	cerr << "\t>>> Control points (type vector< Vector3f >): " << endl;
-	for (const auto &p : P)
-		cerr << "\t>>> " << p << endl;
-	cerr << "\t>>> Steps (type steps): " << steps << endl;
-	cerr << "\t>>> Returning curve." << endl;
 
 	return fixClosed(R);
 }
@@ -102,46 +78,30 @@ Curve evalBspline(const vector<Vector3f> &P, unsigned steps)
 	}
 
 	Curve R;
-	Vector3f B(0, 0, 1); // Vector3f::cross(Vector3f(1, 0, 0), P[1] - P[0]);
+	Vector3f B(0, 0, 1);
 
 	for (size_t i = 0, numCurves = P.size() - 3; i < numCurves; ++i)
-	{
-		const Vector3f &P0 = P[i];
-		const Vector3f &P1 = P[i + 1];
-		const Vector3f &P2 = P[i + 2];
-		const Vector3f &P3 = P[i + 3];
-
 		for (unsigned j = 0; j <= steps; ++j)
 		{
-			float t = static_cast<float>(j) / steps;
-			float t2 = t * t;
-			float t3 = t2 * t;
+			float t = float(j) / steps, t2 = t * t, t3 = t2 * t;
 
-			CurvePoint point;
-			point.V = (1.0f / 6.0f) * ((-t3 + 3 * t2 - 3 * t + 1) * P0 +
-									   (3 * t3 - 6 * t2 + 4) * P1 +
-									   (-3 * t3 + 3 * t2 + 3 * t + 1) * P2 +
-									   t3 * P3);
+			Vector3f V = (1.0f / 6.0f) * ((-t3 + 3 * t2 - 3 * t + 1) * P[i] +
+										  (3 * t3 - 6 * t2 + 4) * P[i + 1] +
+										  (-3 * t3 + 3 * t2 + 3 * t + 1) * P[i + 2] +
+										  t3 * P[i + 3]),
 
-			point.T = ((-t2 + 2 * t - 1) * P0 +
-					   (3 * t2 - 4 * t) * P1 +
-					   (-3 * t2 + 2 * t + 1) * P2 +
-					   t2 * P3)
-						  .normalized();
+					 T = ((-t2 + 2 * t - 1) * P[i] +
+						  (3 * t2 - 4 * t) * P[i + 1] +
+						  (-3 * t2 + 2 * t + 1) * P[i + 2] +
+						  t2 * P[i + 3])
+							 .normalized(),
 
-			point.N = Vector3f::cross(B, point.T).normalized();
-			point.B = B = Vector3f::cross(point.T, point.N);
+					 N = Vector3f::cross(B, T).normalized();
 
-			R.push_back(point);
+			B = Vector3f::cross(T, N);
+
+			R.push_back({V, T, N, B});
 		}
-	}
-
-	cerr << "\t>>> evalBSpline has been called with the following input:" << endl;
-	cerr << "\t>>> Control points (type vector< Vector3f >): " << endl;
-	for (const auto &p : P)
-		cerr << "\t>>> " << p << endl;
-	cerr << "\t>>> Steps (type steps): " << steps << endl;
-	cerr << "\t>>> Returning curve." << endl;
 
 	return fixClosed(R);
 }

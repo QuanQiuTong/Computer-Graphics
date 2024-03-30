@@ -38,30 +38,39 @@ Surface quad()
     return ret;
 }
 
-constexpr float PI2 = 2 * 3.14159265358979323846f;
+void addTriangles(vector<Tup3u> &VF, size_t sweepSize, size_t curveSize)
+{
+    for (unsigned i = 0; i < (sweepSize - 1) * curveSize; i++)
+    {
+        if ((i + 1) % curveSize == 0)
+            continue;
+        VF.push_back({i, i + 1, i + curveSize});
+        VF.push_back({i + 1, i + curveSize + 1, i + curveSize});
+    }
+    // same as:
+    /* for (unsigned i = 0; i < sweepSize - 1; i++)
+        for (unsigned j = 0; j < curveSize - 1; j++)
+        {
+            VF.push_back({i * curveSize + j, i * curveSize + j + 1, (i + 1) * curveSize + j});
+            VF.push_back({i * curveSize + j + 1, (i + 1) * curveSize + j + 1, (i + 1) * curveSize + j});
+        } */
+}
 
 Surface makeSurfRev(const Curve &profile, unsigned steps)
 {
     if (!checkFlat(profile))
         throw "makeSurfRev: profile curve must be flat on xy plane.";
 
+    constexpr float PI2 = 2 * 3.14159265358979323846f;
     Surface surface;
-
-    for (const auto &p : profile)
-        for (unsigned j = 0; j <= steps; j++)
-        {
-            Matrix3f M = Matrix3f::rotateY(PI2 * j / steps);
-            surface.VV.push_back(M * p.V);
-            surface.VN.push_back(M.inverse().transposed() * -p.N); //.normalized());
-        }
-
-    for (unsigned k = 0; k < surface.VV.size() - (steps + 1); k++)
-        if ((k + 1) % (steps + 1) != 0)
-        {
-            surface.VF.push_back(Tup3u(k + 1, k, k + steps + 1));
-            surface.VF.push_back(Tup3u(k + 1, k + 1 + steps, k + 2 + steps));
-        }
-
+    for (unsigned j = 0; j <= steps; j++)
+    {
+        Matrix3f M = Matrix3f::rotateY(PI2 * j / steps);
+        for (const auto &p : profile)
+            surface.VV.push_back(M * p.V),
+                surface.VN.push_back(M.inverse().transposed() * -p.N); //.normalized());
+    }
+    addTriangles(surface.VF, steps + 1, profile.size());
     return surface; // VV.size()  == profile.size() * (steps + 1)
 }
 
@@ -71,23 +80,14 @@ Surface makeGenCyl(const Curve &profile, const Curve &sweep)
         throw "makeGenCyl: profile curve must be flat on xy plane.";
 
     Surface surface;
-
     for (unsigned i = 0; i < sweep.size(); i++)
     {
         Matrix4f M = {{sweep[i].N, 0}, {sweep[i].B, 0}, {sweep[i].T, 0}, {sweep[i].V, 1}};
         for (const auto &p : profile)
-        {
-            surface.VV.push_back((M * Vector4f(p.V, 1)).xyz());
-            surface.VN.push_back(-(M * Vector4f(p.N, 0)).xyz()); //.normalized();
-        }
+            surface.VV.push_back((M * Vector4f(p.V, 1)).xyz()),
+                surface.VN.push_back(-(M * Vector4f(p.N, 0)).xyz()); //.normalized();
     }
-    unsigned curveSize = (unsigned)profile.size();
-    for (unsigned i = 0; i < sweep.size() - 1; i++)
-        for (unsigned j = 0; j < curveSize - 1; j++)
-        {
-            surface.VF.push_back({i * curveSize + j, i * curveSize + j + 1, (i + 1) * curveSize + j});
-            surface.VF.push_back({i * curveSize + j + 1, (i + 1) * curveSize + j + 1, (i + 1) * curveSize + j});
-        }
+    addTriangles(surface.VF, sweep.size(), profile.size());
     return surface;
 }
 
