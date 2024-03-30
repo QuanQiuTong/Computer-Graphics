@@ -6,86 +6,144 @@ const float c_pi = 3.14159265358979323846f;
 
 namespace
 {
-// Approximately equal to.  We don't want to use == because of
-// precision issues with floating point.
-inline bool approx(const Vector3f& lhs, const Vector3f& rhs)
-{
-	const float eps = 1e-8f;
-	return (lhs - rhs).absSquared() < eps;
+	// Approximately equal to.  We don't want to use == because of
+	// precision issues with floating point.
+	inline bool approx(const Vector3f &lhs, const Vector3f &rhs)
+	{
+		const float eps = 1e-8f;
+		return (lhs - rhs).absSquared() < eps;
+	}
+
 }
 
-
+Matrix3f rotate(const Vector3f &axis, float theta)
+{
+	float c = cos(theta), s = sin(theta), t = 1 - c, x = axis[0], y = axis[1], z = axis[2];
+	return {
+		{t * x * x + c, t * x * y - s * z, t * x * z + s * y},
+		{t * x * y + s * z, t * y * y + c, t * y * z - s * x},
+		{t * x * z - s * y, t * y * z + s * x, t * z * z + c}};
 }
 
-
-Curve evalBezier(const vector< Vector3f >& P, unsigned steps)
+Curve &fixClosed(Curve &curve)
 {
-	// Check
+	// If curve is not closed or need not fix, return it as is.
+	if (!approx(curve.front().V, curve.back().V) || approx(curve.front().N, curve.back().N))
+		return curve;
+
+	float theta = acos(Vector3f::dot(curve.front().N, curve.back().N));
+	for (size_t i = 0; i < curve.size(); i++)
+	{
+		Matrix3f M = rotate(curve[i].T, theta * i / curve.size());
+		curve[i].N = M * curve[i].N;
+		curve[i].B = M * curve[i].B;
+	}
+
+	return curve;
+}
+
+Curve evalBezier(const vector<Vector3f> &P, unsigned steps)
+{
 	if (P.size() < 4 || P.size() % 3 != 1)
 	{
 		cerr << "evalBezier must be called with 3n+1 control points." << endl;
 		exit(0);
 	}
 
-	// TODO:
-	// You should implement this function so that it returns a Curve
-	// (e.g., a vector< CurvePoint >).  The variable "steps" tells you
-	// the number of points to generate on each piece of the spline.
-	// At least, that's how the sample solution is implemented and how
-	// the SWP files are written.  But you are free to interpret this
-	// variable however you want, so long as you can control the
-	// "resolution" of the discretized spline curve with it.
+	Curve R(steps + 1);
+	Vector3f B(0, 0, 1); // Vector3f::cross(Vector3f(1, 0, 0), P[1] - P[0]);
 
-	// Make sure that this function computes all the appropriate
-	// Vector3fs for each CurvePoint: V,T,N,B.
-	// [NBT] should be unit and orthogonal.
-
-	// Also note that you may assume that all Bezier curves that you
-	// receive have G1 continuity.  Otherwise, the TNB will not be
-	// be defined at points where this does not hold.
-
-	cerr << "\t>>> evalBezier has been called with the following input:" << endl;
-
-	cerr << "\t>>> Control points (type vector< Vector3f >): " << endl;
-	for (int i = 0; i < (int)P.size(); ++i)
+	for (size_t i = 0, numCurves = (P.size() - 1) / 3; i < numCurves; ++i)
 	{
-		cerr << "\t>>> " << P[i] << endl;
+		const Vector3f &P0 = P[i * 3];
+		const Vector3f &P1 = P[i * 3 + 1];
+		const Vector3f &P2 = P[i * 3 + 2];
+		const Vector3f &P3 = P[i * 3 + 3];
+
+		for (unsigned j = 0; j <= steps; ++j)
+		{
+			float t = static_cast<float>(j) / steps;
+			float t2 = t * t;
+			float t3 = t2 * t;
+
+			CurvePoint &point = R[i * steps + j];
+			point.V = (1 - 3 * t + 3 * t2 - t3) * P0 +
+					  (3 * t - 6 * t2 + 3 * t3) * P1 +
+					  (3 * t2 - 3 * t3) * P2 +
+					  t3 * P3;
+
+			point.T = ((-3 + 6 * t - 3 * t2) * P0 +
+					   (3 - 12 * t + 9 * t2) * P1 +
+					   (6 * t - 9 * t2) * P2 +
+					   3 * t2 * P3)
+						  .normalized();
+
+			point.N = Vector3f::cross(B, point.T).normalized();
+			point.B = B = Vector3f::cross(point.T, point.N);
+		}
 	}
 
+	cerr << "\t>>> evalBezier has been called with the following input:" << endl;
+	cerr << "\t>>> Control points (type vector< Vector3f >): " << endl;
+	for (const auto &p : P)
+		cerr << "\t>>> " << p << endl;
 	cerr << "\t>>> Steps (type steps): " << steps << endl;
-	cerr << "\t>>> Returning empty curve." << endl;
+	cerr << "\t>>> Returning curve." << endl;
 
-	// Right now this will just return this empty curve.
-	return Curve();
+	return fixClosed(R);
 }
 
-Curve evalBspline(const vector< Vector3f >& P, unsigned steps)
+Curve evalBspline(const vector<Vector3f> &P, unsigned steps)
 {
-	// Check
 	if (P.size() < 4)
 	{
 		cerr << "evalBspline must be called with 4 or more control points." << endl;
 		exit(0);
 	}
 
-	// TODO:
-	// It is suggested that you implement this function by changing
-	// basis from B-spline to Bezier.  That way, you can just call
-	// your evalBezier function.
+	Curve R;
+	Vector3f B(0, 0, 1); // Vector3f::cross(Vector3f(1, 0, 0), P[1] - P[0]);
 
-	cerr << "\t>>> evalBSpline has been called with the following input:" << endl;
-
-	cerr << "\t>>> Control points (type vector< Vector3f >): " << endl;
-	for (int i = 0; i < (int)P.size(); ++i)
+	for (size_t i = 0, numCurves = P.size() - 3; i < numCurves; ++i)
 	{
-		cerr << "\t>>> " << P[i] << endl;
+		const Vector3f &P0 = P[i];
+		const Vector3f &P1 = P[i + 1];
+		const Vector3f &P2 = P[i + 2];
+		const Vector3f &P3 = P[i + 3];
+
+		for (unsigned j = 0; j <= steps; ++j)
+		{
+			float t = static_cast<float>(j) / steps;
+			float t2 = t * t;
+			float t3 = t2 * t;
+
+			CurvePoint point;
+			point.V = (1.0f / 6.0f) * ((-t3 + 3 * t2 - 3 * t + 1) * P0 +
+									   (3 * t3 - 6 * t2 + 4) * P1 +
+									   (-3 * t3 + 3 * t2 + 3 * t + 1) * P2 +
+									   t3 * P3);
+
+			point.T = ((-t2 + 2 * t - 1) * P0 +
+					   (3 * t2 - 4 * t) * P1 +
+					   (-3 * t2 + 2 * t + 1) * P2 +
+					   t2 * P3)
+						  .normalized();
+
+			point.N = Vector3f::cross(B, point.T).normalized();
+			point.B = B = Vector3f::cross(point.T, point.N);
+
+			R.push_back(point);
+		}
 	}
 
+	cerr << "\t>>> evalBSpline has been called with the following input:" << endl;
+	cerr << "\t>>> Control points (type vector< Vector3f >): " << endl;
+	for (const auto &p : P)
+		cerr << "\t>>> " << p << endl;
 	cerr << "\t>>> Steps (type steps): " << steps << endl;
-	cerr << "\t>>> Returning empty curve." << endl;
+	cerr << "\t>>> Returning curve." << endl;
 
-	// Return an empty curve right now.
-	return Curve();
+	return fixClosed(R);
 }
 
 Curve evalCircle(float radius, unsigned steps)
@@ -119,7 +177,7 @@ Curve evalCircle(float radius, unsigned steps)
 	return R;
 }
 
-void recordCurve(const Curve& curve, VertexRecorder* recorder)
+void recordCurve(const Curve &curve, VertexRecorder *recorder)
 {
 	const Vector3f WHITE(1, 1, 1);
 	for (int i = 0; i < (int)curve.size() - 1; ++i)
@@ -128,13 +186,13 @@ void recordCurve(const Curve& curve, VertexRecorder* recorder)
 		recorder->record_poscolor(curve[i + 1].V, WHITE);
 	}
 }
-void recordCurveFrames(const Curve& curve, VertexRecorder* recorder, float framesize)
+void recordCurveFrames(const Curve &curve, VertexRecorder *recorder, float framesize)
 {
 	Matrix4f T;
 	const Vector3f RED(1, 0, 0);
 	const Vector3f GREEN(0, 1, 0);
 	const Vector3f BLUE(0, 0, 1);
-	
+
 	const Vector4f ORGN(0, 0, 0, 1);
 	const Vector4f AXISX(framesize, 0, 0, 1);
 	const Vector4f AXISY(0, framesize, 0, 1);
@@ -146,9 +204,9 @@ void recordCurveFrames(const Curve& curve, VertexRecorder* recorder, float frame
 		T.setCol(1, Vector4f(curve[i].B, 0));
 		T.setCol(2, Vector4f(curve[i].T, 0));
 		T.setCol(3, Vector4f(curve[i].V, 1));
- 
+
 		// Transform orthogonal frames into model space
-		Vector4f MORGN  = T * ORGN;
+		Vector4f MORGN = T * ORGN;
 		Vector4f MAXISX = T * AXISX;
 		Vector4f MAXISY = T * AXISY;
 		Vector4f MAXISZ = T * AXISZ;
@@ -164,4 +222,3 @@ void recordCurveFrames(const Curve& curve, VertexRecorder* recorder, float frame
 		recorder->record_poscolor(MAXISZ.xyz(), BLUE);
 	}
 }
-
