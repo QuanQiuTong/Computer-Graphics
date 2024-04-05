@@ -320,14 +320,6 @@ void loadObjects(int argc, char *argv[])
     }
 
     ifstream in(argv[1]);
-    
-        // std::string infile;
-        // cin >> infile;
-
-        //ifstream in("E:/starter1/swp/core.swp");
-        // ifstream in("wineglass.swp");
-        // ifstream in("E:/starter1/swp/weird.swp");
-    
     if (!in) {
         cerr << argv[1] << " not found\a" << endl;
         exit(0);

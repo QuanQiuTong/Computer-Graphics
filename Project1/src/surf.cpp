@@ -68,13 +68,14 @@ Surface makeSurfRev(const Curve &profile, unsigned steps)
         Matrix3f M = Matrix3f::rotateY(PI2 * j / steps);
         for (const auto &p : profile)
             surface.VV.push_back(M * p.V),
-                surface.VN.push_back(M.inverse().transposed() * -p.N); //.normalized());
+                surface.VN.push_back(M /*.inverse().transposed() */ * -p.N);
+        // M = (M^T)^-1 for rotation matrices.
     }
     addTriangles(surface.VF, steps + 1, profile.size());
-    return surface; // VV.size()  == profile.size() * (steps + 1)
+    return surface;
 }
 
-Surface makeGenCyl(const Curve &profile, const Curve &sweep)
+Surface makeGenCyl0(const Curve &profile, const Curve &sweep)
 {
     if (!checkFlat(profile))
         throw "makeGenCyl: profile curve must be flat on xy plane.";
@@ -85,7 +86,26 @@ Surface makeGenCyl(const Curve &profile, const Curve &sweep)
         Matrix4f M = {{sweep[i].N, 0}, {sweep[i].B, 0}, {sweep[i].T, 0}, {sweep[i].V, 1}};
         for (const auto &p : profile)
             surface.VV.push_back((M * Vector4f(p.V, 1)).xyz()),
-                surface.VN.push_back(-(M * Vector4f(p.N, 0)).xyz()); //.normalized();
+                surface.VN.push_back(M.getSubmatrix3x3(0, 0).inverse().transposed() * -p.N);
+        // Here we treat M as a genaral affine transformation matrix.
+    }
+    addTriangles(surface.VF, sweep.size(), profile.size());
+    return surface;
+}
+
+Surface makeGenCyl(const Curve &profile, const Curve &sweep)
+{
+    if (!checkFlat(profile))
+        throw "makeGenCyl: profile curve must be flat on xy plane.";
+
+    Surface surface;
+    for (unsigned i = 0; i < sweep.size(); i++)
+    {
+        Matrix3f M = {sweep[i].N, sweep[i].B, sweep[i].T};
+        for (const auto &p : profile)
+            surface.VV.push_back(M * p.V + sweep[i].V),
+                surface.VN.push_back(M * -p.N);
+        // M = (M^T)^-1 for rotation matrices.
     }
     addTriangles(surface.VF, sweep.size(), profile.size());
     return surface;

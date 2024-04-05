@@ -16,20 +16,20 @@ namespace
 
 }
 
-Curve &fixClosed(Curve &curve)
+Curve &fixClosed(Curve &c)
 {
 	// If curve is not closed or need not fixing, return it as is.
-	if (!approx(curve.front().V, curve.back().V) || approx(curve.front().N, curve.back().N))
-		return curve;
+	if (!approx(c.front().V, c.back().V) || !approx(c.front().T, c.back().T) || approx(c.front().N, c.back().N))
+		return c;
 
-	float t = acos(Vector3f::dot(curve.front().N, curve.back().N)) / curve.size();
-	for (size_t i = 0; i < curve.size(); i++)
+	float t = acos(Vector3f::dot(c.front().N, c.back().N)) / (c.size() - 1);
+	for (size_t i = 0; i < c.size(); i++)
 	{
-		curve[i].N = cos(t * i) * curve[i].N - sin(t * i) * curve[i].B;
-		curve[i].B = Vector3f::cross(curve[i].T, curve[i].N);
+		c[i].N = cos(t * i) * c[i].N - sin(t * i) * c[i].B; // 6 multiplication and 3 addition
+		c[i].B = Vector3f::cross(c[i].T, c[i].N);			// also 6 multiplication and 3 addition
 	}
 
-	return curve;
+	return c;
 }
 
 Curve evalBezier(const vector<Vector3f> &P, unsigned steps)
