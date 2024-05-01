@@ -67,12 +67,9 @@ bool Group::intersect(const Ray &r, float tmin, Hit &h) const
     // we implemented this for you
     bool hit = false;
     for (Object3D *o : m_members)
-    {
         if (o->intersect(r, tmin, h))
-        {
             hit = true;
-        }
-    }
+
     return hit;
     // END STARTER
 }
@@ -87,12 +84,12 @@ Plane::Plane(const Vector3f &normal, float d, Material *m) : Object3D(m)
 bool Plane::intersect(const Ray &r, float tmin, Hit &h) const
 {
     Vector3f ori = r.getOrigin(), dir = r.getDirection();
-    // (ori + t * dir) dot normal = d
-    // t = (d - ori dot normal) / (dir dot normal)
-    float t = (_d - dot(ori, _normal)) / dot(dir, _normal);
-    if (t < tmin)
+    if (dot(dir, _normal) == 0)
         return false;
-    if (t < h.getT())
+
+    float t = (_d - dot(ori, _normal)) / dot(dir, _normal);
+
+    if (tmin < t && t < h.getT())
     {
         h.set(t, material, _normal);
         return true;
@@ -127,11 +124,11 @@ static auto cross = Vector3f::cross;
 // 	return false;
 // }
 
-bool Triangle::intersect(const Ray &ar, float tmin, Hit &ah) const
+bool Triangle::intersect(const Ray &r, float tmin, Hit &h) const
 {
     static auto det = Matrix3f::determinant3x3;
-    Vector3f R = ar.getOrigin();
-    Vector3f D = ar.getDirection();
+    Vector3f R = r.getOrigin();
+    Vector3f D = r.getDirection();
     Vector3f a = _v[0], b = _v[1], c = _v[2];
     float mA, mx, my, mz, by, bz, newt;
     mA = det(a.x() - b.x(), a.y() - b.y(), a.z() - b.z(), a.x() - c.x(), a.y() - c.y(), a.z() - c.z(), D.x(), D.y(), D.z());
@@ -141,11 +138,11 @@ bool Triangle::intersect(const Ray &ar, float tmin, Hit &ah) const
     by = mx / mA;
     bz = my / mA;
     newt = mz / mA;
-    if (by + bz < 1 && by > 0 && bz > 0 && newt >= tmin && newt < ah.getT())
+    if (by + bz < 1 && by > 0 && bz > 0 && newt >= tmin && newt < h.getT())
     {
         Vector3f sn = cross(a - b, a - c);
         sn.normalize();
-        ah.set(newt, material, sn);
+        h.set(newt, material, sn);
         return true;
     }
     return false;
@@ -181,20 +178,39 @@ Transform::Transform(const Matrix4f &m,
 }
 bool Transform::intersect(const Ray &r, float tmin, Hit &h) const
 {
-    Vector3f origin = r.getOrigin();
+    Vector3f orgin = r.getOrigin();
     Vector3f direction = r.getDirection();
 
-    origin = (_m.inverse() * Vector4f(origin, 1)).xyz();
-    direction = _m.inverse().getSubmatrix3x3(0, 0) * direction;
-    Ray ray(origin, direction);
-
-    if (_object->intersect(ray, tmin, h))
+    Matrix4f am = _m.inverse();
+    orgin = (am * Vector4f(orgin, 1)).xyz().normalized();
+    direction = (am * Vector4f(direction, 0)).xyz().normalized();
+    Ray tr = Ray(orgin, direction);
+    if (_object->intersect(tr, tmin, h))
     {
-        Vector3f norm = _m.inverse().transposed().getSubmatrix3x3(0, 0) * h.getNormal();
-        norm.normalize();
-
-        h.set(h.getT(), material, norm);
+        Matrix4f bm = am.transposed();
+        Vector3f normal = (bm * Vector4f(h.getNormal(), 0.0f)).xyz().normalized();
+        h.set(h.getT(), h.getMaterial(), normal);
         return true;
     }
     return false;
 }
+
+// bool Transform::intersect(const Ray &r, float tmin, Hit &h) const
+// {
+//     Vector3f origin = r.getOrigin();
+//     Vector3f direction = r.getDirection();
+
+//     origin = (_m.inverse() * Vector4f(origin, 1)).xyz().normalized();
+//     direction = (_m.inverse()* Vector4f(direction, 0)).xyz().normalized();
+//     Ray ray(origin, direction);
+
+//     if (_object->intersect(ray, tmin, h))
+//     {
+//         Vector3f norm = (_m.inverse().transposed() * Vector4f(h.getNormal(),0)).xyz();
+//         norm.normalize();
+
+//         h.set(h.getT(), material, norm);
+//         return true;
+//     }
+//     return false;
+// }
