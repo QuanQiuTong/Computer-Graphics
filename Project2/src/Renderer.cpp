@@ -59,24 +59,17 @@ void Renderer::Render()
             Vector3f color = {0, 0, 0}, norm = {0, 0, 0};
             float depth = 0;
             For(i, scale) For(j, scale)
-            {
-                Vector3f color2 = {0, 0, 0}, norm2 = {0, 0, 0};
-                float depth2 = 0;
                 For(_, samples)
-                {
-                    float ndcy = 2 * ((y * scale + i + jitter()) / (h * scale - 1.0f)) - 1.0f;
-                    float ndcx = 2 * ((x * scale + j + jitter()) / (w * scale - 1.0f)) - 1.0f;
-                    Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
-                    Hit h;
-                    color2 += traceRay(r, cam->getTMin(), _args.bounces, h);
-                    norm2 += (h.getNormal() + 1.0f) / 2.0f;
-                    float range = (_args.depth_max - _args.depth_min);
-                    if (range)
-                        depth2 += (h.t - _args.depth_min) / range;
-                }
-                color += color2 * weight[i][j] / samples;
-                norm += norm2 * weight[i][j] / samples;
-                depth += depth2 * weight[i][j] / samples;
+            {
+                float ndcy = 2 * ((y * scale + i + jitter()) / (h * scale - 1.0f)) - 1.0f;
+                float ndcx = 2 * ((x * scale + j + jitter()) / (w * scale - 1.0f)) - 1.0f;
+                Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
+                Hit h;
+                color += traceRay(r, cam->getTMin(), _args.bounces, h) * weight[i][j] / samples;
+                norm += (h.getNormal() + 1.0f) / 2.0f * weight[i][j] / samples;
+                float range = (_args.depth_max - _args.depth_min);
+                if (range)
+                    depth += (h.t - _args.depth_min) / range * weight[i][j] / samples;
             }
             image.setPixel(x, y, color / sum);
             nimage.setPixel(x, y, norm / sum);
@@ -121,3 +114,42 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
     }
     return I;
 }
+
+/**
+ * The following code is a refactored version of the code above.
+ * It is even harder to read and less efficient.
+ * The only advantage is that it is shorter.
+ */
+/*
+For(y, h) For(x, w)
+{
+    Vector3f color = {0, 0, 0}, norm = {0, 0, 0};
+    float depth = 0;
+    int scale = _args.filter ? scale : 1;
+    float sum = _args.filter ? sum : samples;
+    For(i, scale) For(j, scale)
+    {
+        Vector3f color2 = {0, 0, 0}, norm2 = {0, 0, 0};
+        float depth2 = 0;
+        For(_, samples)
+        {
+            float ndcy = 2 * ((y * scale + i + jitter()) / (h * scale - 1.0f)) - 1.0f;
+            float ndcx = 2 * ((x * scale + j + jitter()) / (w * scale - 1.0f)) - 1.0f;
+            Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
+            Hit h;
+            color2 += traceRay(r, cam->getTMin(), _args.bounces, h);
+            norm2 += (h.getNormal() + 1.0f) / 2.0f;
+            float range = (_args.depth_max - _args.depth_min);
+            if (range)
+                depth2 += (h.t - _args.depth_min) / range;
+        }
+        color += _args.filter ? color2 * weight[i][j] / samples : color2 / samples;
+        norm += _args.filter ? norm2 * weight[i][j] / samples : norm2 / samples;
+        depth += _args.filter ? depth2 * weight[i][j] / samples : depth2 / samples;
+    }
+    image.setPixel(x, y, color / sum);
+    nimage.setPixel(x, y, norm / sum);
+    dimage.setPixel(x, y, Vector3f(depth / sum));
+}
+
+*/
