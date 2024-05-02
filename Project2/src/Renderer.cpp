@@ -7,9 +7,17 @@
 #include "VecUtils.h"
 
 #include <limits>
+#include <random>
+#include <functional>
 
 Renderer::Renderer(const ArgParser &args) : _args(args),
                                             _scene(args.input_file) {}
+
+constexpr int jittersamples = 16;
+
+static std::default_random_engine generator;
+static std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+static auto random_float = std::bind(distribution, generator);
 
 void Renderer::Render()
 {
@@ -17,31 +25,48 @@ void Renderer::Render()
 
     Image image(w, h), nimage(w, h), dimage(w, h);
 
-    // loop through all the pixels in the image
-    // generate all the samples
-
-    // This look generates camera rays and callse traceRay.
-    // It also write to the color, normal, and depth images.
-    // You should understand what this code does.
     Camera *cam = _scene.getCamera();
     for (int y = 0; y < h; ++y)
     {
         float ndcy = 2 * (y / (h - 1.0f)) - 1.0f;
         for (int x = 0; x < w; ++x)
         {
-            float ndcx = 2 * (x / (w - 1.0f)) - 1.0f;
-            // Use PerspectiveCamera to generate a ray.
-            // You should understand what generateRay() does.
-            Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
+            if (!_args.jitter)
+            {
+                float ndcx = 2 * (x / (w - 1.0f)) - 1.0f;
+                // Use PerspectiveCamera to generate a ray.
+                // You should understand what generateRay() does.
+                Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
 
-            Hit h;
-            Vector3f color = traceRay(r, cam->getTMin(), _args.bounces, h);
+                Hit h;
+                Vector3f color = traceRay(r, cam->getTMin(), _args.bounces, h);
 
-            image.setPixel(x, y, color);
-            nimage.setPixel(x, y, (h.getNormal() + 1.0f) / 2.0f);
-            float range = (_args.depth_max - _args.depth_min);
-            if (range)
-                dimage.setPixel(x, y, Vector3f((h.t - _args.depth_min) / range));
+                image.setPixel(x, y, color);
+                nimage.setPixel(x, y, (h.getNormal() + 1.0f) / 2.0f);
+                float range = (_args.depth_max - _args.depth_min);
+                if (range)
+                    dimage.setPixel(x, y, Vector3f((h.t - _args.depth_min) / range));
+
+                continue;
+            }
+            Vector3f color(0, 0, 0), normal(0, 0, 0);
+            float depth = 0;
+            for (int i = 0; i < jittersamples; ++i)
+            {
+                float ndcx = 2 * (x + random_float()) / (w - 1.0f) - 1.0f;
+                float ndcy = 2 * (y + random_float()) / (h - 1.0f) - 1.0f;
+                Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
+
+                Hit h;
+                color += traceRay(r, cam->getTMin(), _args.bounces, h);
+                normal += (h.getNormal() + 1.0f) / 2.0f;
+                float range = (_args.depth_max - _args.depth_min);
+                if (range)
+                    depth += (h.t - _args.depth_min) / range;
+            }
+            image.setPixel(x, y, color / jittersamples);
+            nimage.setPixel(x, y, normal / jittersamples);
+            dimage.setPixel(x, y, Vector3f(depth / jittersamples));
         }
     }
 
@@ -60,26 +85,8 @@ static Ray refl(const Ray &r, const Hit &h)
             (r.getDirection() - 2 * h.getNormal() * Vector3f::dot(r.getDirection(), h.getNormal())).normalized()};
 }
 
-// static Vector3f traceReflect(const Ray &r, const SceneParser &scene, int bounces, const Vector3f &indensity)
-// {
-//     if (bounces < 0)
-//         return {0, 0, 0};
-
-//     Hit h;
-//     if (!scene.getGroup()->intersect(r, 0.0001f, h))
-//         return scene.getBackgroundColor(r.getDirection());
-
-//     Material *m = h.getMaterial();
-
-//     return m->shade(r, h, -r.getDirection(), indensity) /* this point is light by camera?? */ +
-//            traceReflect(refl(r, h), scene, bounces - 1, indensity) * m->getSpecularColor();
-// }
-
 Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
 {
-    if (bounces < 0)
-        return {0, 0, 0};
-
     if (!_scene.getGroup()->intersect(r, tmin, h))
         return _scene.getBackgroundColor(r.getDirection());
 
@@ -95,8 +102,9 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
         Hit sh, rh;
         if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist)
             continue;
-        I += m->shade(r, h, tolight, ind) +
-             traceRay(refl(r, h), 0.0001f, bounces - 1, rh) * m->getSpecularColor();
+        I += m->shade(r, h, tolight, ind);
+        if (bounces > 0)
+            I += traceRay(refl(r, h), 0.0001f, bounces - 1, rh) * m->getSpecularColor();
     }
     return I;
 }
