@@ -14,6 +14,7 @@ Renderer::Renderer(const ArgParser &args) : _args(args),
                                             _scene(args.input_file) {}
 
 constexpr int jittersamples = 16;
+constexpr int upscale = 3, weight[3][3] = {{1, 2, 1}, {2, 4, 2}, {1, 2, 1}};
 
 static std::default_random_engine generator;
 static std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
@@ -27,48 +28,27 @@ void Renderer::Render()
 
     Camera *cam = _scene.getCamera();
     for (int y = 0; y < h; ++y)
-    {
-        float ndcy = 2 * (y / (h - 1.0f)) - 1.0f;
         for (int x = 0; x < w; ++x)
         {
-            if (!_args.jitter)
-            {
-                float ndcx = 2 * (x / (w - 1.0f)) - 1.0f;
-                // Use PerspectiveCamera to generate a ray.
-                // You should understand what generateRay() does.
-                Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
-
-                Hit h;
-                Vector3f color = traceRay(r, cam->getTMin(), _args.bounces, h);
-
-                image.setPixel(x, y, color);
-                nimage.setPixel(x, y, (h.getNormal() + 1.0f) / 2.0f);
-                float range = (_args.depth_max - _args.depth_min);
-                if (range)
-                    dimage.setPixel(x, y, Vector3f((h.t - _args.depth_min) / range));
-
-                continue;
-            }
-            Vector3f color(0, 0, 0), normal(0, 0, 0);
+            Vector3f color = {0, 0, 0}, norm = {0, 0, 0};
             float depth = 0;
-            for (int i = 0; i < jittersamples; ++i)
+            int samples = _args.jitter ? jittersamples : 1;
+            for (int i = 0; i < samples; ++i)
             {
-                float ndcx = 2 * (x + random_float()) / (w - 1.0f) - 1.0f;
-                float ndcy = 2 * (y + random_float()) / (h - 1.0f) - 1.0f;
+                float ndcy = 2 * ((y + (_args.jitter ? random_float() : 0)) / (h - 1.0f)) - 1.0f;
+                float ndcx = 2 * ((x + (_args.jitter ? random_float() : 0)) / (w - 1.0f)) - 1.0f;
                 Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
-
                 Hit h;
                 color += traceRay(r, cam->getTMin(), _args.bounces, h);
-                normal += (h.getNormal() + 1.0f) / 2.0f;
+                norm += (h.getNormal() + 1.0f) / 2.0f;
                 float range = (_args.depth_max - _args.depth_min);
                 if (range)
                     depth += (h.t - _args.depth_min) / range;
             }
-            image.setPixel(x, y, color / jittersamples);
-            nimage.setPixel(x, y, normal / jittersamples);
-            dimage.setPixel(x, y, Vector3f(depth / jittersamples));
+            image.setPixel(x, y, color / samples);
+            nimage.setPixel(x, y, norm / samples);
+            dimage.setPixel(x, y, Vector3f(depth / samples));
         }
-    }
 
     // save the files
     if (_args.output_file.size())
