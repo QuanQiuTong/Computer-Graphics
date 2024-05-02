@@ -54,20 +54,13 @@ void Renderer::Render()
         nimage.savePNG(_args.normals_file);
 }
 
-Vector3f mirror(const Vector3f &tolight, const Vector3f &normal)
+static Ray refl(const Ray &r, const Hit &h)
 {
-    return (2 * normal * Vector3f::dot(tolight, normal) - tolight).normalized();
+    return {r.pointAtParameter(h.getT()),
+            (r.getDirection() - 2 * h.getNormal() * Vector3f::dot(r.getDirection(), h.getNormal())).normalized()};
 }
 
-Ray refl(const Ray &r, const Hit &h)
-{
-    Vector3f tolight = -r.getDirection();
-    Vector3f normal = h.getNormal();
-    Vector3f reflection = (2 * normal * Vector3f::dot(tolight, normal) - tolight).normalized();
-    return Ray(r.pointAtParameter(h.getT()), reflection);
-}
-
-Vector3f traceReflect(const Ray &r, const SceneParser &scene, int bounces, const Vector3f &indensity)
+static Vector3f traceReflect(const Ray &r, const SceneParser &scene, int bounces, const Vector3f &indensity)
 {
     if (bounces < 0)
         return {0, 0, 0};
@@ -90,28 +83,17 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
     Material *m = h.getMaterial();
 
     auto p = r.pointAtParameter(h.getT());
-    Vector3f I = _scene.getAmbientLight() * m->getDiffuseColor();
+    Vector3f I = _scene.getAmbientLight() * m->getDiffuseColor(), tolight, ind;
     for (Light *light : _scene.lights)
     {
-        Vector3f tolight, ind;
         float dist;
         light->getIllumination(p, tolight, ind, dist);
 
         Hit sh;
         if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist)
             continue;
-        I += m->shade(r, h, tolight, ind);
-
-        Ray ref = {p, mirror(tolight, h.getNormal())};
-        Ray good = refl(r, h);
-        I += traceReflect(ref, _scene, bounces - 1, ind) * m->getSpecularColor();
-
-        if ((ref.getOrigin() - good.getOrigin()).abs() > 0.0001 || (ref.getDirection() - good.getDirection()).abs() > 0.0001)
-        {
-            printf("ref %f %f %f %f %f %f\n", ref.getOrigin().x(), ref.getOrigin().y(), ref.getOrigin().z(), ref.getDirection().x(), ref.getDirection().y(), ref.getDirection().z());
-            printf("good %f %f %f %f %f %f\n", good.getOrigin().x(), good.getOrigin().y(), good.getOrigin().z(), good.getDirection().x(), good.getDirection().y(), good.getDirection().z());
-            puts("");
-        }
+        I += m->shade(r, h, tolight, ind) +
+             traceReflect(refl(r, h), _scene, bounces - 1, ind) * m->getSpecularColor();
     }
     return I;
 }
