@@ -75,8 +75,7 @@ private:
     std::vector<Object3D*> m_members;
 };
 
-// TODO: Implement Plane representing an infinite plane
-// Choose your representation, add more fields and fill in the functions
+
 class Plane : public Object3D
 {
 public:
@@ -90,8 +89,7 @@ public:
 };
 
 
-// TODO: implement this class.
-// Add more fields as necessary, but do not remove getVertex and getNormal
+// do not remove getVertex and getNormal
 // as they are currently called by the Octree for optimization
 class Triangle : public Object3D
 {
@@ -131,9 +129,6 @@ private:
 };
 
 
-// TODO implement this class
-// So that the intersect function first transforms the ray
-// Add more fields as necessary
 class Transform : public Object3D
 {
 public:
@@ -142,7 +137,7 @@ public:
     virtual bool intersect(const Ray &r, float tmin, Hit &h) const override;
 
 private:
-    Matrix4f _m;
+    Matrix4f _inv;
     Object3D *_object; //un-transformed object  
 };
 
