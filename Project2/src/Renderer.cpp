@@ -59,28 +59,27 @@ Vector3f mirror(const Vector3f &tolight, const Vector3f &normal)
     return (2 * normal * Vector3f::dot(tolight, normal) - tolight).normalized();
 }
 
+Ray refl(const Ray &r, const Hit &h)
+{
+    Vector3f tolight = -r.getDirection();
+    Vector3f normal = h.getNormal();
+    Vector3f reflection = (2 * normal * Vector3f::dot(tolight, normal) - tolight).normalized();
+    return Ray(r.pointAtParameter(h.getT()), reflection);
+}
+
 Vector3f traceReflect(const Ray &r, const SceneParser &scene, int bounces, const Vector3f &indensity)
 {
     if (bounces < 0)
-        return Vector3f(0, 0, 0);
+        return {0, 0, 0};
 
     Hit h;
-    if (!scene.getGroup()->intersect(r, 0.001f, h))
+    if (!scene.getGroup()->intersect(r, 0.0001f, h))
         return scene.getBackgroundColor(r.getDirection());
 
     Material *m = h.getMaterial();
-    if (!m)
-        return Vector3f(0, 0, 0);
 
-    auto tolight = -r.getDirection();
-
-    auto I = m->shade(r, h, tolight, indensity);
-
-    Ray refl(r.pointAtParameter(h.getT()), mirror(tolight, h.getNormal()));
-
-    I += m->getSpecularColor() * traceReflect(refl, scene, bounces - 1, indensity);
-
-    return I;
+    return m->shade(r, h, -r.getDirection(), indensity) +
+           traceReflect(refl(r, h), scene, bounces - 1, indensity) * m->getSpecularColor();
 }
 
 Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
@@ -89,19 +88,30 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
         return _scene.getBackgroundColor(r.getDirection());
 
     Material *m = h.getMaterial();
-    assert(m);
-        
+
     auto p = r.pointAtParameter(h.getT());
-    Vector3f I(0, 0, 0);
-    for (auto light : _scene.lights)
+    Vector3f I = _scene.getAmbientLight() * m->getDiffuseColor();
+    for (Light *light : _scene.lights)
     {
         Vector3f tolight, ind;
         float dist;
         light->getIllumination(p, tolight, ind, dist);
+
+        Hit sh;
+        if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist)
+            continue;
         I += m->shade(r, h, tolight, ind);
 
-        // Ray refl(p, mirror(tolight, h.getNormal()));
-        // I += h.getMaterial()->getSpecularColor() * traceReflect(refl, _scene, bounces - 1, ind);
+        Ray ref = {p, mirror(tolight, h.getNormal())};
+        Ray good = refl(r, h);
+        I += traceReflect(ref, _scene, bounces - 1, ind) * m->getSpecularColor();
+
+        if ((ref.getOrigin() - good.getOrigin()).abs() > 0.0001 || (ref.getDirection() - good.getDirection()).abs() > 0.0001)
+        {
+            printf("ref %f %f %f %f %f %f\n", ref.getOrigin().x(), ref.getOrigin().y(), ref.getOrigin().z(), ref.getDirection().x(), ref.getDirection().y(), ref.getDirection().z());
+            printf("good %f %f %f %f %f %f\n", good.getOrigin().x(), good.getOrigin().y(), good.getOrigin().z(), good.getDirection().x(), good.getDirection().y(), good.getDirection().z());
+            puts("");
+        }
     }
-    return I + _scene.getAmbientLight() * m->getDiffuseColor();
+    return I;
 }
