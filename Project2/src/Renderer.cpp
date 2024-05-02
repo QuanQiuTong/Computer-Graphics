@@ -60,23 +60,26 @@ static Ray refl(const Ray &r, const Hit &h)
             (r.getDirection() - 2 * h.getNormal() * Vector3f::dot(r.getDirection(), h.getNormal())).normalized()};
 }
 
-static Vector3f traceReflect(const Ray &r, const SceneParser &scene, int bounces, const Vector3f &indensity)
+// static Vector3f traceReflect(const Ray &r, const SceneParser &scene, int bounces, const Vector3f &indensity)
+// {
+//     if (bounces < 0)
+//         return {0, 0, 0};
+
+//     Hit h;
+//     if (!scene.getGroup()->intersect(r, 0.0001f, h))
+//         return scene.getBackgroundColor(r.getDirection());
+
+//     Material *m = h.getMaterial();
+
+//     return m->shade(r, h, -r.getDirection(), indensity) /* this point is light by camera?? */ +
+//            traceReflect(refl(r, h), scene, bounces - 1, indensity) * m->getSpecularColor();
+// }
+
+Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
 {
     if (bounces < 0)
         return {0, 0, 0};
 
-    Hit h;
-    if (!scene.getGroup()->intersect(r, 0.0001f, h))
-        return scene.getBackgroundColor(r.getDirection());
-
-    Material *m = h.getMaterial();
-
-    return m->shade(r, h, -r.getDirection(), indensity) +
-           traceReflect(refl(r, h), scene, bounces - 1, indensity) * m->getSpecularColor();
-}
-
-Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
-{
     if (!_scene.getGroup()->intersect(r, tmin, h))
         return _scene.getBackgroundColor(r.getDirection());
 
@@ -89,11 +92,11 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
         float dist;
         light->getIllumination(p, tolight, ind, dist);
 
-        Hit sh;
+        Hit sh, rh;
         if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist)
             continue;
         I += m->shade(r, h, tolight, ind) +
-             traceReflect(refl(r, h), _scene, bounces - 1, ind) * m->getSpecularColor();
+             traceRay(refl(r, h), 0.0001f, bounces - 1, rh) * m->getSpecularColor();
     }
     return I;
 }
