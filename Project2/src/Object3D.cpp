@@ -63,20 +63,16 @@ int Group::getGroupSize() const
 
 bool Group::intersect(const Ray &r, float tmin, Hit &h) const
 {
-    // BEGIN STARTER
     // we implemented this for you
     bool hit = false;
     for (Object3D *o : m_members)
         if (o->intersect(r, tmin, h))
             hit = true;
-
     return hit;
-    // END STARTER
 }
 
 Plane::Plane(const Vector3f &normal, float d, Material *m) : Object3D(m)
 {
-    assert(normal.abs() - 1.0f < 1e-5);
     _normal = normal;
     _d = d;
 }
@@ -171,24 +167,31 @@ bool Triangle::intersect(const Ray &r, float tmin, Hit &h) const
 //     return false;
 // }
 
-Transform::Transform(const Matrix4f &m,
-                     Object3D *obj) : _object(obj)
+Transform::Transform(const Matrix4f &m, Object3D *obj) : _object(obj)
 {
     _m = m;
+    printf("Transform\n");
+    printf("m: %f %f %f %f\n", m(0, 0), m(0, 1), m(0, 2), m(0, 3));
+    printf("m: %f %f %f %f\n", m(1, 0), m(1, 1), m(1, 2), m(1, 3));
+    printf("m: %f %f %f %f\n", m(2, 0), m(2, 1), m(2, 2), m(2, 3));
+    printf("m: %f %f %f %f\n", m(3, 0), m(3, 1), m(3, 2), m(3, 3));
+    puts("");
 }
+
+
 bool Transform::intersect(const Ray &r, float tmin, Hit &h) const
 {
-    Vector3f orgin = r.getOrigin();
-    Vector3f direction = r.getDirection();
+    Vector3f orgin;
+    Vector3f direction;
 
     Matrix4f am = _m.inverse();
-    orgin = (am * Vector4f(orgin, 1)).xyz().normalized();
-    direction = (am * Vector4f(direction, 0)).xyz().normalized();
+    orgin = (am * Vector4f(r.getOrigin(), 1)).xyz();
+    direction = (am * Vector4f(r.getDirection(), 0)).xyz().normalized();
     Ray tr = Ray(orgin, direction);
     if (_object->intersect(tr, tmin, h))
     {
-        Matrix4f bm = am.transposed();
-        Vector3f normal = (bm * Vector4f(h.getNormal(), 0.0f)).xyz().normalized();
+        am.transpose();
+        Vector3f normal = (am * Vector4f(h.getNormal(), 0)).xyz().normalized();
         h.set(h.getT(), h.getMaterial(), normal);
         return true;
     }

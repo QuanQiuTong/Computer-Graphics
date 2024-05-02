@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-class VecUtils
+class VecUtils0
 {
   public:
     static Vector3f min(const Vector3f &b, const Vector3f &c)

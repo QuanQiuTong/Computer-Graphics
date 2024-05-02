@@ -89,8 +89,7 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
         return _scene.getBackgroundColor(r.getDirection());
 
     Material *m = h.getMaterial();
-    if (!m)
-        return Vector3f(1, 0, 1);
+    assert(m);
         
     auto p = r.pointAtParameter(h.getT());
     Vector3f I(0, 0, 0);
