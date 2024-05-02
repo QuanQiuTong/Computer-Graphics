@@ -14,29 +14,33 @@ Renderer::Renderer(const ArgParser &args) : _args(args),
                                             _scene(args.input_file) {}
 
 constexpr int jittersamples = 16;
-constexpr int upscale = 3, weight[3][3] = {{1, 2, 1}, {2, 4, 2}, {1, 2, 1}};
+constexpr int scale = 3, weight[3][3] = {{1, 2, 1}, {2, 4, 2}, {1, 2, 1}}, sum = 16;
 
-static std::default_random_engine generator;
-static std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-static auto random_float = std::bind(distribution, generator);
-
+#define For(i, n) for (int i = 0; i < n; ++i)
 void Renderer::Render()
 {
     int w = _args.width, h = _args.height;
+    int samples = _args.jitter ? jittersamples : 1;
+    auto jitter = _args.jitter ? ([]
+                                  { static std::default_random_engine generator;
+                                    static std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+                                    return distribution(generator); })
+                               : ([]
+                                  { return 0.0f; });
 
     Image image(w, h), nimage(w, h), dimage(w, h);
 
     Camera *cam = _scene.getCamera();
-    for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x)
+
+    if (!_args.filter)
+        For(y, h) For(x, w)
         {
             Vector3f color = {0, 0, 0}, norm = {0, 0, 0};
             float depth = 0;
-            int samples = _args.jitter ? jittersamples : 1;
-            for (int i = 0; i < samples; ++i)
+            For(_, samples)
             {
-                float ndcy = 2 * ((y + (_args.jitter ? random_float() : 0)) / (h - 1.0f)) - 1.0f;
-                float ndcx = 2 * ((x + (_args.jitter ? random_float() : 0)) / (w - 1.0f)) - 1.0f;
+                float ndcy = 2 * ((y + jitter()) / (h - 1.0f)) - 1.0f;
+                float ndcx = 2 * ((x + jitter()) / (w - 1.0f)) - 1.0f;
                 Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
                 Hit h;
                 color += traceRay(r, cam->getTMin(), _args.bounces, h);
@@ -49,8 +53,36 @@ void Renderer::Render()
             nimage.setPixel(x, y, norm / samples);
             dimage.setPixel(x, y, Vector3f(depth / samples));
         }
+    else
+        For(y, h) For(x, w)
+        {
+            Vector3f color = {0, 0, 0}, norm = {0, 0, 0};
+            float depth = 0;
+            For(i, scale) For(j, scale)
+            {
+                Vector3f color2 = {0, 0, 0}, norm2 = {0, 0, 0};
+                float depth2 = 0;
+                For(_, samples)
+                {
+                    float ndcy = 2 * ((y * scale + i + jitter()) / (h * scale - 1.0f)) - 1.0f;
+                    float ndcx = 2 * ((x * scale + j + jitter()) / (w * scale - 1.0f)) - 1.0f;
+                    Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
+                    Hit h;
+                    color2 += traceRay(r, cam->getTMin(), _args.bounces, h);
+                    norm2 += (h.getNormal() + 1.0f) / 2.0f;
+                    float range = (_args.depth_max - _args.depth_min);
+                    if (range)
+                        depth2 += (h.t - _args.depth_min) / range;
+                }
+                color += color2 * weight[i][j] / samples;
+                norm += norm2 * weight[i][j] / samples;
+                depth += depth2 * weight[i][j] / samples;
+            }
+            image.setPixel(x, y, color / sum);
+            nimage.setPixel(x, y, norm / sum);
+            dimage.setPixel(x, y, Vector3f(depth / sum));
+        }
 
-    // save the files
     if (_args.output_file.size())
         image.savePNG(_args.output_file);
     if (_args.depth_file.size())
@@ -58,6 +90,7 @@ void Renderer::Render()
     if (_args.normals_file.size())
         nimage.savePNG(_args.normals_file);
 }
+#undef For
 
 static Ray refl(const Ray &r, const Hit &h)
 {
