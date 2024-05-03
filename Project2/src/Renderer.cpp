@@ -65,15 +65,15 @@ void Renderer::Render()
                 float ndcx = 2 * ((x * scale + j + jitter()) / (w * scale - 1.0f)) - 1.0f;
                 Ray r = cam->generateRay(Vector2f(ndcx, ndcy));
                 Hit h;
-                color += traceRay(r, cam->getTMin(), _args.bounces, h) * weight[i][j] / samples;
-                norm += (h.getNormal() + 1.0f) / 2.0f * weight[i][j] / samples;
+                color += traceRay(r, cam->getTMin(), _args.bounces, h) * weight[i][j];
+                norm += (h.getNormal() + 1.0f) / 2.0f * weight[i][j];
                 float range = (_args.depth_max - _args.depth_min);
                 if (range)
-                    depth += (h.t - _args.depth_min) / range * weight[i][j] / samples;
+                    depth += (h.t - _args.depth_min) / range * weight[i][j];
             }
-            image.setPixel(x, y, color / sum);
-            nimage.setPixel(x, y, norm / sum);
-            dimage.setPixel(x, y, Vector3f(depth / sum));
+            image.setPixel(x, y, color / sum / samples);
+            nimage.setPixel(x, y, norm / sum / samples);
+            dimage.setPixel(x, y, Vector3f(depth / sum / samples));
         }
 
     if (_args.output_file.size())
@@ -106,7 +106,7 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
         light->getIllumination(p, tolight, ind, dist);
 
         Hit sh, rh;
-        if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist)
+        if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist + 0.0001f)
             continue;
         I += m->shade(r, h, tolight, ind);
         if (bounces > 0)

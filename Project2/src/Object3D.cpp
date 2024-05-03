@@ -130,9 +130,8 @@ bool Triangle::intersect(const Ray &r, float tmin, Hit &h) const
     newt = mz / mA;
     if (by + bz < 1 && by > 0 && bz > 0 && newt >= tmin && newt < h.getT())
     {
-        Vector3f sn = cross(a - b, a - c);
-        sn.normalize();
-        h.set(newt, material, sn);
+        Vector3f sn = (1 - by - bz) * _normals[0] + by * _normals[1] + bz * _normals[2];
+        h.set(newt, material, sn.normalized());
         return true;
     }
     return false;
@@ -177,6 +176,8 @@ bool Transform::intersect(const Ray &r, float tmin, Hit &h) const
     if (!_object->intersect(tr, tmin, h))
         return false;
 
+    Vector3f norm = trn(_inv.transposed(), h.getNormal()).normalized();
+    printf("%f %f %f\n", norm.x(), norm.y(), norm.z());
     h.set(h.getT(), h.getMaterial(), trn(_inv.transposed(), h.getNormal()).normalized());
     return true;
 }
