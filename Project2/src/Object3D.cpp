@@ -172,12 +172,14 @@ bool Transform::intersect(const Ray &r, float tmin, Hit &h) const
 {
     Ray tr(trn(_inv, r.getOrigin(), 1),
            trn(_inv, r.getDirection()).normalized());
+    Hit th;
+    tmin = (trn(_inv, r.pointAtParameter(tmin), 1) - tr.getOrigin()).abs();
 
-    if (!_object->intersect(tr, tmin, h))
+    if (!_object->intersect(tr, tmin, th))
         return false;
 
-    Vector3f norm = trn(_inv.transposed(), h.getNormal()).normalized();
-    printf("%f %f %f\n", norm.x(), norm.y(), norm.z());
-    h.set(h.getT(), h.getMaterial(), trn(_inv.transposed(), h.getNormal()).normalized());
+    float t = (trn(_inv.inverse(), r.pointAtParameter(th.getT()), 1) - tr.getOrigin()).abs();
+
+    h.set(t, th.getMaterial(), trn(_inv.transposed(), th.getNormal()).normalized());
     return true;
 }
