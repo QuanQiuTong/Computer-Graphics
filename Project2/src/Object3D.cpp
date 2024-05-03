@@ -178,7 +178,9 @@ bool Transform::intersect(const Ray &r, float tmin, Hit &h) const
     if (!_object->intersect(tr, tmin, th))
         return false;
 
-    float t = (trn(_inv.inverse(), r.pointAtParameter(th.getT()), 1) - tr.getOrigin()).abs();
+    float t = (trn(_inv.inverse(), tr.pointAtParameter(th.getT()), 1) - r.getOrigin()).abs();
+    if(t < tmin || t > h.getT())
+        return false;
 
     h.set(t, th.getMaterial(), trn(_inv.transposed(), th.getNormal()).normalized());
     return true;
