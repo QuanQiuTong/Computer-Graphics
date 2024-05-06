@@ -1,9 +1,9 @@
 #include "Material.h"
 
-float clamp(const Vector3f &l, const Vector3f &r)
+static float clamp(const Vector3f &l, const Vector3f &r)
 {
     float dot = Vector3f::dot(l, r);
-    return dot >= 0 ? dot : 0;
+    return dot > 0 ? dot : 0;
 }
 
 Vector3f Material::shade(const Ray &ray,
@@ -16,13 +16,8 @@ Vector3f Material::shade(const Ray &ray,
 
     return lightIntensity * (clamp(L, normal) * _diffuseColor +
                              pow(clamp(R, V), _shininess) * _specularColor);
+    // pow(clamp(normal, (V+L).normalized()), _shininess) * _specularColor);
 }
-// {
-//     auto [t, material, normal] = hit;
-
-//     Vector3f diffuse = clamp(dirToLight, normal) * lightIntensity * getDiffuseColor(),
-//              specular = pow(clamp(2 * Vector3f::dot(dirToLight, normal) * normal - dirToLight, -ray.getDirection()), material->_shininess) * lightIntensity * material->getSpecularColor();
-// }
 /*
 当给定光线方向 L 和屏幕法
 向量 N ，当 L·N 小于 0 时，光源在切平面以下，不计算漫反射。

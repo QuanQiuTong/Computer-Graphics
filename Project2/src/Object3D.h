@@ -137,7 +137,7 @@ public:
     virtual bool intersect(const Ray &r, float tmin, Hit &h) const override;
 
 private:
-    Matrix4f _inv;
+    Matrix4f _m, _inv;
     Object3D *_object; //un-transformed object  
 };
 

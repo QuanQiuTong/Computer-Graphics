@@ -98,18 +98,20 @@ Vector3f Renderer::traceRay(const Ray &r, float tmin, int bounces, Hit &h) const
 
     Material *m = h.getMaterial();
 
-    auto p = r.pointAtParameter(h.getT());
-    Vector3f I = _scene.getAmbientLight() * m->getDiffuseColor(), tolight, ind;
-    Hit sh, rh;
+    Vector3f p = r.pointAtParameter(h.getT());
+    Vector3f I = _scene.getAmbientLight() * m->getDiffuseColor();
     for (Light *light : _scene.lights)
     {
+        Vector3f tolight, ind;
         float dist;
         light->getIllumination(p, tolight, ind, dist);
 
-        if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist + 0.0001f)
+        Hit sh;
+        if (_args.shadows && _scene.getGroup()->intersect({p, tolight}, 0.0001f, sh) && sh.getT() < dist)
             continue;
         I += m->shade(r, h, tolight, ind);
     }
+    Hit rh;
     if (bounces > 0)
         I += traceRay(refl(r, h), 0.0001f, bounces - 1, rh) * m->getSpecularColor();
     return I;
